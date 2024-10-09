@@ -1,26 +1,12 @@
-import React, { useState, useEffect } from "react";
-import {
-  DndContext,
-  useDroppable,
-  useDraggable,
-  DragEndEvent,
-  UniqueIdentifier,
-} from "@dnd-kit/core";
+import { useState, useEffect } from "react";
+import { DndContext, DragEndEvent } from "@dnd-kit/core";
 import "./Style.css";
 import BoxEstadisticas from "./componentes/estadisticas";
+import ObjDetalle from "./componentes/objetoDetalle";
 import axios from "axios";
-
-interface DroppableCuadradoProps {
-  id: UniqueIdentifier;
-  extraClasses?: string;
-  children?: React.ReactNode;
-}
-
-interface DraggableItemProps {
-  id: UniqueIdentifier;
-  content: string;
-  image: string; // Agregado para mostrar la imagen del objeto
-}
+import DroppableCuadrado from "./componentes/droppableCuadrado";
+import DraggableItem from "./componentes/draggableItem";
+import InventoryGrid from "./componentes/InventaryGrid";
 
 interface InventoryItem {
   _id: string;
@@ -34,17 +20,14 @@ function Inventario() {
     {}
   );
   const [inventoryPage, setInventoryPage] = useState(1);
+  const [hoveredItem, setHoveredItem] = useState<InventoryItem | null>(null); // Estado para el objeto "hovered"
   //const [selectedHero, setSelectedHero] = useState<Hero | null>(null);
 
   useEffect(() => {
     const obtenerInventario = async () => {
       try {
-        const response = await axios.get(
-          `http://localhost:3000/inventary/66fd53b9eb98e9e84e53ef04`
-        ); // Cambia el ID por el del usuario
-        const { inventario } = response.data;
-
-        const formattedItems = inventario.reduce(
+        const response = await axios.get(`http://localhost:3000/inventary/8`);
+        const formattedItems = response.data.inventario.reduce(
           (
             acc: { [key: string]: InventoryItem },
             item: { objetoId: InventoryItem; active: boolean },
@@ -60,7 +43,33 @@ function Inventario() {
           },
           {}
         );
+        setItems(formattedItems);
+      } catch (error) {
+        console.error("Error al obtener inventario:", error);
+      }
+    };
 
+    const obtenerInventario_game = async () => {
+      try {
+        const response = await axios.get(
+          `http://localhost:3000/inventary_game/8`
+        );
+        const formattedItems = response.data.inventario.reduce(
+          (
+            acc: { [key: string]: InventoryItem },
+            item: { objetoId: InventoryItem; active: boolean },
+            index: number
+          ) => {
+            acc[`bag${index + 1}`] = {
+              _id: item.objetoId._id,
+              name: item.objetoId.name,
+              image: item.objetoId.image,
+              active: item.active,
+            };
+            return acc;
+          },
+          {}
+        );
         setItems(formattedItems);
       } catch (error) {
         console.error("Error al obtener inventario:", error);
@@ -68,6 +77,7 @@ function Inventario() {
     };
 
     obtenerInventario();
+    obtenerInventario_game();
   }, []);
 
   /*   const heroes: Hero[] = [
@@ -87,15 +97,8 @@ function Inventario() {
         );
         const targetKey = over.id as string;
 
-        // Solo proceder si tanto sourceKey como targetKey existen
         if (sourceKey && targetKey) {
-          // Guardamos los elementos de la fuente y el destino
-          const sourceItem = newItems[sourceKey];
-          const targetItem = newItems[targetKey];
-
-          // Intercambiamos los elementos
-          newItems[sourceKey] = targetItem;
-          newItems[targetKey] = sourceItem;
+          swapItems(newItems, sourceKey, targetKey);
         }
 
         return newItems;
@@ -103,9 +106,30 @@ function Inventario() {
     }
   };
 
+  const swapItems = (
+    items: { [key: string]: InventoryItem | null },
+    sourceKey: string,
+    targetKey: string
+  ) => {
+    const sourceItem = items[sourceKey];
+    const targetItem = items[targetKey];
+    items[sourceKey] = targetItem;
+    items[targetKey] = sourceItem;
+  };
+
   return (
     <DndContext onDragEnd={handleDragEnd}>
       <div className="container">
+        {/* Mostrar el detalle del objeto que está siendo hovered */}
+        {hoveredItem && (
+          <ObjDetalle
+            titulo={hoveredItem.name}
+            img={hoveredItem.image}
+            calificacion={2} // Esto puede variar dependiendo de los datos del inventario
+            estadisticas="Estadísticas dinámicas aquí"
+          />
+        )}
+
         <div
           className="section1"
           style={{ fontFamily: "OCR A", fontSize: "20px" }}
@@ -174,13 +198,14 @@ function Inventario() {
                     <DroppableCuadrado
                       key={cuadradoId}
                       id={cuadradoId}
-                      extraClasses={index % 2 === 0 ? "" : "mvl"}
+                      extraClasses={index % 2 === 0 ? "mvr" : ""}
                     >
                       {items[cuadradoId] && (
                         <DraggableItem
                           id={items[cuadradoId]!._id}
                           content={items[cuadradoId]!.name}
                           image={items[cuadradoId]!.image}
+                          onHover={setHoveredItem}
                         />
                       )}
                     </DroppableCuadrado>
@@ -208,6 +233,7 @@ function Inventario() {
                           id={items[cuadradoId]!._id}
                           content={items[cuadradoId]!.name}
                           image={items[cuadradoId]!.image}
+                          onHover={setHoveredItem}
                         />
                       )}
                     </DroppableCuadrado>
@@ -231,86 +257,24 @@ function Inventario() {
             </button>
           </div>
           <div className="inventario">
-            {Array.from({ length: 16 }, (_, index) => (
-              <DroppableCuadrado
-                key={`inventory${index + 1}`}
-                id={`inventory${index + 1}`}
-              >
-                {items[`inventory${index + 1}`] && (
-                  <DraggableItem
-                    id={items[`inventory${index + 1}`]!._id}
-                    content={items[`inventory${index + 1}`]!.name}
-                    image={items[`inventory${index + 1}`]!.image}
-                  />
-                )}
-              </DroppableCuadrado>
-            ))}
+            <InventoryGrid
+              baseId="inventory"
+              items={items}
+              onHover={setHoveredItem}
+            />
           </div>
           <h1>BOLSA</h1>
           <div className="bolsa">
-            {Array.from({ length: 16 }, (_, index) => (
-              <DroppableCuadrado key={`bag${index + 1}`} id={`bag${index + 1}`}>
-                {items[`bag${index + 1}`] && (
-                  <DraggableItem
-                    id={items[`bag${index + 1}`]!._id}
-                    content={items[`bag${index + 1}`]!.name}
-                    image={items[`bag${index + 1}`]!.image}
-                  />
-                )}
-              </DroppableCuadrado>
-            ))}
+            <InventoryGrid
+              baseId="bag"
+              items={items}
+              onHover={setHoveredItem}
+            />
           </div>
         </div>
       </div>
     </DndContext>
   );
 }
-
-const DroppableCuadrado: React.FC<DroppableCuadradoProps> = ({
-  id,
-  extraClasses = "",
-  children,
-}) => {
-  const { setNodeRef, isOver } = useDroppable({ id });
-
-  return (
-    <div
-      ref={setNodeRef}
-      className={`cuadrado ${extraClasses} ${isOver ? "over" : ""}`}
-    >
-      {children}
-    </div>
-  );
-};
-
-const DraggableItem: React.FC<DraggableItemProps> = ({
-  id,
-  content,
-  image,
-}) => {
-  const { attributes, listeners, setNodeRef, transform } = useDraggable({ id });
-
-  const style = transform
-    ? {
-        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-      }
-    : undefined;
-
-  return (
-    <div
-      ref={setNodeRef}
-      className="draggable"
-      style={style}
-      {...listeners}
-      {...attributes}
-    >
-      <img
-        src={image}
-        alt={content}
-        style={{ width: "50px", height: "50px" }}
-      />
-    </div>
-  );
-};
 
 export default Inventario;
